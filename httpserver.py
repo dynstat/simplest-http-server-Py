@@ -1,6 +1,7 @@
 import os
 import socket
 import threading
+import mimetypes  # For content-type detection
 
 # Define the server address and port
 SERVER_ADDRESS = ("localhost", 8000)
@@ -44,6 +45,14 @@ def handle_request(conn, addr):
         request_line = request_data.splitlines()[0]
         method, path, http_version = request_line.split()
 
+        # Basic security: Validate HTTP method
+        if method not in ["GET", "POST"]:
+            raise ValueError("Unsupported HTTP method")
+
+        # Basic security: Sanitize the requested path to prevent directory traversal
+        if "../" in path:
+            raise ValueError("Invalid path")
+
         # Default path to index.html if root is requested
         if path == "/":
             path = "/index.html"
@@ -51,18 +60,19 @@ def handle_request(conn, addr):
         # Construct the file path
         file_path = os.path.join(BASE_DIR, path.strip("/"))
 
+        # Basic security: Ensure requested file path is within the base directory
+        if not file_path.startswith(BASE_DIR):
+            raise ValueError("Invalid file path")
+
         # Check if the file exists and is not a directory
         if os.path.exists(file_path) and not os.path.isdir(file_path):
             with open(file_path, "rb") as file:
                 response_body = file.read()
             status_code = f"{STATUS_CODE[200]}"
-            # Determine content type
-            if file_path.endswith(".css"):
-                content_type = "text/css"
-            elif file_path.endswith(".js"):
-                content_type = "application/javascript"
-            elif file_path.endswith(".html"):
-                content_type = "text/html"
+            # Determine content type using mimetypes module
+            content_type, _ = mimetypes.guess_type(file_path)
+            if content_type is None:
+                content_type = "application/octet-stream"  # Default to binary data if type is unknown
         else:
             # File not found, send 404 response
             response_body = b"<h1>404 Not Found</h1>"
